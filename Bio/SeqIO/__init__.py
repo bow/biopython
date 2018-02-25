@@ -518,7 +518,7 @@ def write(sequences, handle, format):
     return count
 
 
-def parse(handle, format, alphabet=None):
+def parse(handle, format, alphabet=None, **kwargs):
     r"""Turn a sequence file into an iterator returning SeqRecords.
 
     Arguments:
@@ -595,21 +595,39 @@ def parse(handle, format, alphabet=None):
                                      isinstance(alphabet, AlphabetEncoder)):
         raise ValueError("Invalid alphabet, %r" % alphabet)
 
+    # Strip kwargs format prefix and check that the prefixes are all compatible
+    # with the chosen sequence format..
+    stripped_kwargs = {}
+    for k, v in kwargs.items():
+        try:
+            kw_fmt, kw_k = k.split("_", 1)
+        except ValueError:
+            raise ValueError("Keyword argument '%s' is not prefixed with a"
+                             " sequence format name" % k)
+        if kw_fmt != format.split("-", 1)[0]:
+            raise ValueError("The prefix of keyword argument '%s' is not"
+                             " compatible with the supplied sequence format"
+                             " '%s'" % (k, format))
+        stripped_kwargs[kw_k] = v
+
     with as_handle(handle, mode) as fp:
         # Map the file format to a sequence iterator:
         if format in _FormatToIterator:
             iterator_generator = _FormatToIterator[format]
             if alphabet is None:
-                i = iterator_generator(fp)
+                i = iterator_generator(fp, **stripped_kwargs)
             else:
                 try:
-                    i = iterator_generator(fp, alphabet=alphabet)
+                    i = iterator_generator(fp, alphabet=alphabet,
+                                           **stripped_kwargs)
                 except TypeError:
-                    i = _force_alphabet(iterator_generator(fp), alphabet)
+                    i = _force_alphabet(
+                        iterator_generator(fp, **stripped_kwargs), alphabet)
         elif format in AlignIO._FormatToIterator:
             # Use Bio.AlignIO to read in the alignments
             i = (r for alignment in AlignIO.parse(fp, format,
-                                                  alphabet=alphabet)
+                                                  alphabet=alphabet,
+                                                  **stripped_kwargs)
                  for r in alignment)
         else:
             raise ValueError("Unknown format '%s'" % format)
@@ -633,7 +651,7 @@ def _force_alphabet(record_iterator, alphabet):
                              % (alphabet, record.seq.alphabet))
 
 
-def read(handle, format, alphabet=None):
+def read(handle, format, alphabet=None, **kwargs):
     """Turn a sequence file into a single SeqRecord.
 
     Arguments:
@@ -677,7 +695,7 @@ def read(handle, format, alphabet=None):
     Use the Bio.SeqIO.parse(handle, format) function if you want
     to read multiple records from the handle.
     """
-    iterator = parse(handle, format, alphabet)
+    iterator = parse(handle, format, alphabet, **kwargs)
     try:
         first = next(iterator)
     except StopIteration:
