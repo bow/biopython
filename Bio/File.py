@@ -82,17 +82,29 @@ def as_handle(handleish, mode='r', **kwargs):
     been deprecated (this happens automatically in text mode).
 
     """
+    inner_exc = False
     try:
         if sys.version_info[0] >= 3 and "U" in mode:
             mode = mode.replace("U", "")
         if 'encoding' in kwargs:
             with codecs.open(handleish, mode, **kwargs) as fp:
-                yield fp
+                try:
+                    yield fp
+                except Exception:
+                    inner_exc = True
+                    raise
         else:
             with open(handleish, mode, **kwargs) as fp:
-                yield fp
+                try:
+                    yield fp
+                except Exception:
+                    inner_exc = True
+                    raise
     except TypeError:
-        yield handleish
+        if not inner_exc:
+            yield handleish
+        else:
+            raise
 
 
 def _open_for_random_access(filename):
